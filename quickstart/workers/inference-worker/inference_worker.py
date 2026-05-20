@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from iii import InitOptions, Logger, register_worker
 
 iii = register_worker(
-    os.environ.get("III_URL", "ws://localhost:49134"),
+    os.environ.get("III_URL", "ws://10.0.2.57:49134"),
     InitOptions(worker_name="math-worker"),
 )
 logger = Logger()
