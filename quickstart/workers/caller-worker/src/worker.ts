@@ -8,9 +8,13 @@ iii.registerFunction(
   async (payload: { messages: Record<string, any> } & Record<string, any>) => {
     logger.info('inference::get_response called in TypeScript', payload);
 
+    // Use bridge.invoke to call inference::run_inference on the remote VM
     const result = await iii.trigger({
-      function_id: 'inference::run_inference',
-      payload,
+      function_id: 'bridge.invoke',
+      payload: {
+        function_id: 'inference::run_inference',
+        payload,
+      },
     });
 
     return {
@@ -20,6 +24,7 @@ iii.registerFunction(
     };
   },
 );
+
 
 // --- Uncomment after: iii worker add iii-http ---
 iii.registerFunction(
