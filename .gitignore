@@ -1,0 +1,37 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+crash.log
+
+# SSH Keys - NEVER commit these
+*.pem
+*.key
+devops-key*
+
+# AWS credentials
+.aws/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Assignment planning files (not part of deliverable)
+assig.md
+what_to_do.md
+step_by_step.md

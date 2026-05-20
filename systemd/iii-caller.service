@@ -1,0 +1,22 @@
+[Unit]
+Description=iii Engine with Caller Worker (TypeScript) + HTTP Server
+Documentation=https://iii.dev/docs/
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/app/quickstart
+Environment=III_HOST=0.0.0.0
+ExecStart=/usr/local/bin/iii engine start --config /opt/app/config-caller.yaml
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
