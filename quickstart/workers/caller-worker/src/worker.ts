@@ -5,27 +5,20 @@ const logger = new Logger();
 
 iii.registerFunction(
   'inference::get_response',
-  async (payload: { messages: Record<string, any> } & Record<string, any>) => {
+  async (payload: { messages: Array<Record<string, any>> } & Record<string, any>) => {
     logger.info('inference::get_response called in TypeScript', payload);
 
-    const result = await iii.trigger({
+    return await iii.trigger({
       function_id: 'inference::run_inference',
       payload,
     });
-
-    return {
-      ...result,
-      success:
-        "You've connected two workers and they're interoperating seamlessly, now let's add a few more workers to expand this project's functionality.",
-    };
   },
 );
-
 
 // --- Uncomment after: iii worker add iii-http ---
 iii.registerFunction(
   'http::run_inference_over_http',
-  async (payload: { body: { messages: Record<string, any> } & Record<string, any> }) => {
+  async (payload: { body: { messages: Array<Record<string, any>> } & Record<string, any> }) => {
     const result = await iii.trigger({
       function_id: 'inference::get_response',
       payload: payload.body,
@@ -33,7 +26,7 @@ iii.registerFunction(
     logger.info("Running http inference...")
     return {
       status_code: 200,
-      body: { result },
+      body: result,
       headers: { 'Content-Type': 'application/json' },
     };
   },

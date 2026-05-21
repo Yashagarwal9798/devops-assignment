@@ -40,8 +40,10 @@ resource "aws_instance" "inference_worker" {
   }
 
   user_data = templatefile("${path.module}/userdata/setup-inference-worker.sh", {
-    github_repo_url = "https://github.com/Yashagarwal9798/devops-assignment.git"
+    github_repo_url          = "https://github.com/Yashagarwal9798/devops-assignment.git"
+    caller_worker_private_ip = aws_instance.caller_worker.private_ip
   })
+  user_data_replace_on_change = true
 
   tags = {
     Name    = "${var.project_name}-inference-worker"
@@ -68,6 +70,7 @@ resource "aws_instance" "caller_worker" {
   user_data = templatefile("${path.module}/userdata/setup-caller-worker.sh", {
     github_repo_url = "https://github.com/Yashagarwal9798/devops-assignment.git"
   })
+  user_data_replace_on_change = true
 
   tags = {
     Name    = "${var.project_name}-caller-worker"
@@ -95,6 +98,7 @@ resource "aws_instance" "api_gateway" {
   user_data = templatefile("${path.module}/userdata/setup-api-gateway.sh", {
     caller_worker_private_ip = aws_instance.caller_worker.private_ip
   })
+  user_data_replace_on_change = true
 
   tags = {
     Name    = "${var.project_name}-api-gateway"

@@ -39,7 +39,7 @@ Deploy the [iii quickstart](https://iii.dev/docs/quickstart) distributed inferen
 1. User sends `POST /v1/chat/completions` to the API Gateway (public IP, port 80)
 2. Nginx reverse proxy forwards the request to the **caller worker** (private IP, port 3111)
 3. The caller worker's `http::run_inference_over_http` function receives the request
-4. It calls `inference::get_response` which triggers `inference::run_inference` via RPC
+4. It calls `inference::get_response`, which triggers `inference::run_inference` on the Python worker registered to the same iii engine over the private subnet
 5. The **inference worker** (on a separate VM) loads the `gemma-3-270m` model and generates text
 6. The result flows back: inference worker → caller worker → Nginx → user
 
@@ -89,9 +89,23 @@ curl -X POST http://<API_GATEWAY_PUBLIC_IP>/v1/chat/completions \
 
 ```json
 {
-  "result": {
-    "success": "...",
-    "<model_output>": "The model's generated text response"
+  "id": "chatcmpl-gemma-3-270m",
+  "object": "chat.completion",
+  "model": "ggml-org/gemma-3-270m-GGUF",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The model's generated text response"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 8,
+    "total_tokens": 20
   }
 }
 ```
@@ -100,9 +114,23 @@ curl -X POST http://<API_GATEWAY_PUBLIC_IP>/v1/chat/completions \
 
 ```json
 {
-  "result": {
-    "success": "You've connected two workers and they're interoperating seamlessly...",
-    "response": "2 + 2 equals 4."
+  "id": "chatcmpl-gemma-3-270m",
+  "object": "chat.completion",
+  "model": "ggml-org/gemma-3-270m-GGUF",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "2 + 2 equals 4."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 8,
+    "total_tokens": 20
   }
 }
 ```
@@ -172,6 +200,8 @@ The VMs run setup scripts automatically on boot (user_data). They:
 - Clone the repo and install worker dependencies
 - Start the workers as systemd services
 
+The caller VM owns the iii engine, `iii-http` on port `3111`, and the TypeScript caller worker. The inference VM runs only the Python worker process and connects to the caller VM's engine at `ws://<CALLER_PRIVATE_IP>:49134`.
+
 ### 5. Verify the Deployment
 
 ```bash
@@ -187,12 +217,15 @@ curl -X POST http://<API_GATEWAY_PUBLIC_IP>/v1/chat/completions \
 ### 6. SSH Access (for debugging)
 
 ```bash
-# SSH into API gateway (bastion host)
-ssh -i terraform/devops-key.pem ubuntu@<API_GATEWAY_PUBLIC_IP>
+# Run these from the terraform directory, where devops-key.pem is generated.
+cd terraform
 
-# From the API gateway, SSH into private VMs
-ssh -i devops-key.pem ubuntu@<INFERENCE_WORKER_PRIVATE_IP>
-ssh -i devops-key.pem ubuntu@<CALLER_WORKER_PRIVATE_IP>
+# SSH into API gateway (bastion host)
+ssh -i devops-key.pem ubuntu@<API_GATEWAY_PUBLIC_IP>
+
+# SSH into private VMs from your local machine via the API gateway
+ssh -i devops-key.pem -o IdentitiesOnly=yes -o ProxyJump=ubuntu@<API_GATEWAY_PUBLIC_IP> ubuntu@<INFERENCE_WORKER_PRIVATE_IP>
+ssh -i devops-key.pem -o IdentitiesOnly=yes -o ProxyJump=ubuntu@<API_GATEWAY_PUBLIC_IP> ubuntu@<CALLER_WORKER_PRIVATE_IP>
 
 # Check worker logs
 sudo journalctl -u iii-inference -f   # On inference worker VM

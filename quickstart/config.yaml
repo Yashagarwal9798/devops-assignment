@@ -28,8 +28,8 @@ workers:
   - name: iii-http
     config:
       port: 3111
-      host: 127.0.0.1
-      default_timeout: 30000
+      host: 0.0.0.0
+      default_timeout: 120000
       concurrency_request_limit: 1024
       cors:
         allowed_origins:
@@ -41,6 +41,6 @@ workers:
         - DELETE
         - OPTIONS
   - name: inference-worker
-    worker_path: /Users/anuran/Alchemyst/hiring/may-2026/devops/quickstart/workers/inference-worker
+    worker_path: ./workers/inference-worker
   - name: caller-worker
-    worker_path: /Users/anuran/Alchemyst/hiring/may-2026/devops/quickstart/workers/caller-worker
+    worker_path: ./workers/caller-worker

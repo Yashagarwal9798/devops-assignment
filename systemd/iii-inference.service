@@ -1,5 +1,5 @@
 [Unit]
-Description=iii Engine with Inference Worker (Python)
+Description=iii Inference Worker (Python)
 Documentation=https://iii.dev/docs/
 After=network.target
 Wants=network-online.target
@@ -7,15 +7,14 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/app/quickstart
-Environment=III_HOST=0.0.0.0
-ExecStart=/usr/local/bin/iii engine start --config /opt/app/config-inference.yaml
+WorkingDirectory=/opt/app/quickstart/workers/inference-worker
+Environment=III_URL=ws://CALLER_WORKER_PRIVATE_IP:49134
+ExecStartPre=/bin/bash -c 'until timeout 2 bash -c "</dev/tcp/CALLER_WORKER_PRIVATE_IP/49134"; do echo "waiting for caller engine"; sleep 5; done'
+ExecStart=/opt/app/venv/bin/python inference_worker.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-
-# Resource limits
 LimitNOFILE=65536
 MemoryMax=8G
 

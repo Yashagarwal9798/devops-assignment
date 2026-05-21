@@ -25,7 +25,7 @@ apt-get upgrade -y
 # 2. Install Node.js 20.x
 # ---------------------------------------------------------------------------
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs git curl
+apt-get install -y nodejs git curl jq
 
 # ---------------------------------------------------------------------------
 # 3. Install the iii engine

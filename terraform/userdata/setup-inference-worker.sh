@@ -3,8 +3,8 @@
 # Inference Worker VM Bootstrap Script (VM 1 — Private Subnet)
 # =============================================================================
 # This script runs automatically when the VM boots (via EC2 user_data).
-# It installs Python, dependencies, the iii engine, clones the repo,
-# and starts the inference worker as a systemd service.
+# It installs Python dependencies, clones the repo, and starts the Python
+# inference worker pointed at the caller VM's iii engine over the private subnet.
 
 set -euo pipefail
 exec > >(tee /var/log/user-data.log) 2>&1
@@ -24,10 +24,10 @@ apt-get upgrade -y
 # ---------------------------------------------------------------------------
 # 2. Install Python 3 and required system packages
 # ---------------------------------------------------------------------------
-apt-get install -y python3 python3-pip python3-venv git curl
+apt-get install -y python3 python3-pip python3-venv git curl jq
 
 # ---------------------------------------------------------------------------
-# 3. Install the iii engine (the RPC/messaging runtime)
+# 3. Install the iii CLI for debugging parity with the caller VM
 # ---------------------------------------------------------------------------
 curl -fsSL https://install.iii.dev/iii/main/install.sh | sh
 # Add iii to PATH for all users
@@ -44,72 +44,41 @@ cd /opt/app/quickstart
 # 5. Install Python dependencies for the inference worker
 # ---------------------------------------------------------------------------
 cd /opt/app/quickstart/workers/inference-worker
-pip3 install --break-system-packages -r requirements.txt
+python3 -m venv /opt/app/venv
+/opt/app/venv/bin/pip install --upgrade pip
+/opt/app/venv/bin/pip install -r requirements.txt
 
 # ---------------------------------------------------------------------------
-# 6. Create the iii engine config for this VM
-#    - Only the inference worker runs on this VM
-#    - iii-http is NOT needed here (it runs on the caller-worker VM)
-#    - Engine listens on 0.0.0.0:49134 so remote workers can connect
+# 6. Create systemd service for the inference worker process
+#    The caller VM owns the iii engine and HTTP server. This VM only runs the
+#    Python worker, connecting to the caller engine on the private subnet.
 # ---------------------------------------------------------------------------
-mkdir -p /opt/app/quickstart/data
-cat > /opt/app/config-inference.yaml << 'ENGINECONFIG'
-workers:
-  - name: iii-observability
-    config:
-      enabled: true
-      service_name: iii-inference
-      exporter: memory
-      memory_max_spans: 10000
-      metrics_enabled: true
-      metrics_exporter: memory
-      logs_enabled: true
-      logs_exporter: memory
-      logs_console_output: true
-      sampling_ratio: 1.0
-
-  - name: iii-queue
-    config:
-      adapter:
-        name: builtin
-
-  - name: iii-state
-    config:
-      adapter:
-        name: kv
-        config:
-          store_method: file_based
-          file_path: /opt/app/quickstart/data/state_store.db
-
-  - name: inference-worker
-    worker_path: /opt/app/quickstart/workers/inference-worker
-ENGINECONFIG
-
-# ---------------------------------------------------------------------------
-# 7. Create systemd service for the iii engine + inference worker
-# ---------------------------------------------------------------------------
-cat > /etc/systemd/system/iii-inference.service << 'SERVICEEOF'
+cat > /etc/systemd/system/iii-inference.service << SERVICEEOF
 [Unit]
-Description=iii Engine with Inference Worker
+Description=iii Inference Worker
 After=network.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/app/quickstart
-Environment=III_HOST=0.0.0.0
-ExecStart=/usr/local/bin/iii engine start --config /opt/app/config-inference.yaml
+WorkingDirectory=/opt/app/quickstart/workers/inference-worker
+Environment=III_URL=ws://${caller_worker_private_ip}:49134
+ExecStartPre=/bin/bash -c 'until timeout 2 bash -c "</dev/tcp/${caller_worker_private_ip}/49134"; do echo "waiting for caller engine at ${caller_worker_private_ip}:49134"; sleep 5; done'
+ExecStart=/opt/app/venv/bin/python inference_worker.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+LimitNOFILE=65536
+MemoryMax=8G
 
 [Install]
 WantedBy=multi-user.target
 SERVICEEOF
 
 # ---------------------------------------------------------------------------
-# 8. Enable and start the service
+# 7. Enable and start the service
 # ---------------------------------------------------------------------------
 systemctl daemon-reload
 systemctl enable iii-inference.service

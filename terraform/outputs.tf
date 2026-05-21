@@ -24,17 +24,17 @@ output "caller_worker_private_ip" {
 
 output "ssh_to_api_gateway" {
   description = "SSH command to connect to the API gateway (bastion host)"
-  value       = "ssh -i terraform/devops-key.pem ubuntu@${aws_instance.api_gateway.public_ip}"
+  value       = "ssh -i devops-key.pem ubuntu@${aws_instance.api_gateway.public_ip}"
 }
 
 output "ssh_to_inference_worker" {
-  description = "SSH to inference worker (hop through API gateway first)"
-  value       = "ssh -i devops-key.pem -o ProxyJump=ubuntu@${aws_instance.api_gateway.public_ip} ubuntu@${aws_instance.inference_worker.private_ip}"
+  description = "SSH to inference worker from the terraform directory using the API gateway as a bastion"
+  value       = "ssh -i devops-key.pem -o IdentitiesOnly=yes -o ProxyJump=ubuntu@${aws_instance.api_gateway.public_ip} ubuntu@${aws_instance.inference_worker.private_ip}"
 }
 
 output "ssh_to_caller_worker" {
-  description = "SSH to caller worker (hop through API gateway first)"
-  value       = "ssh -i devops-key.pem -o ProxyJump=ubuntu@${aws_instance.api_gateway.public_ip} ubuntu@${aws_instance.caller_worker.private_ip}"
+  description = "SSH to caller worker from the terraform directory using the API gateway as a bastion"
+  value       = "ssh -i devops-key.pem -o IdentitiesOnly=yes -o ProxyJump=ubuntu@${aws_instance.api_gateway.public_ip} ubuntu@${aws_instance.caller_worker.private_ip}"
 }
 
 output "test_curl_command" {
