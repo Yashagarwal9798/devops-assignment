@@ -18,7 +18,7 @@ echo "========================================="
 # 1. System updates
 # ---------------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
+apt-get -o Acquire::ForceIPv4=true update -y
 apt-get upgrade -y
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ apt-get install -y nodejs git curl jq
 # 3. Install the iii engine
 # ---------------------------------------------------------------------------
 curl -fsSL https://install.iii.dev/iii/main/install.sh | sh
-ln -sf /root/.iii/bin/iii /usr/local/bin/iii || true
+ln -sf /root/.local/bin/iii /usr/local/bin/iii || true
 
 # ---------------------------------------------------------------------------
 # 4. Clone the project repository
@@ -115,7 +115,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/app/quickstart
 Environment=III_HOST=0.0.0.0
-ExecStart=/usr/local/bin/iii engine start --config /opt/app/config-caller.yaml
+ExecStart=/usr/local/bin/iii --config /opt/app/config-caller.yaml
 Restart=always
 RestartSec=10
 StandardOutput=journal

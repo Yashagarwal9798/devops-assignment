@@ -15,11 +15,11 @@ CALLER_IP="${1:?Usage: $0 <CALLER_WORKER_PRIVATE_IP>}"
 echo "Installing inference worker dependencies..."
 echo "Caller engine IP: $CALLER_IP"
 
-sudo apt-get update -y
+sudo apt-get -o Acquire::ForceIPv4=true update -y
 sudo apt-get install -y python3 python3-pip python3-venv git curl jq
 
 curl -fsSL https://install.iii.dev/iii/main/install.sh | bash
-sudo ln -sf ~/.iii/bin/iii /usr/local/bin/iii || true
+sudo ln -sf /root/.local/bin/iii /usr/local/bin/iii || true
 
 if [ ! -d /opt/app ]; then
     cd /opt

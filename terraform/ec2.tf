@@ -45,6 +45,8 @@ resource "aws_instance" "inference_worker" {
   })
   user_data_replace_on_change = true
 
+  depends_on = [aws_route_table_association.private]
+
   tags = {
     Name    = "${var.project_name}-inference-worker"
     Role    = "inference-worker"
@@ -71,6 +73,8 @@ resource "aws_instance" "caller_worker" {
     github_repo_url = "https://github.com/Yashagarwal9798/devops-assignment.git"
   })
   user_data_replace_on_change = true
+
+  depends_on = [aws_route_table_association.private]
 
   tags = {
     Name    = "${var.project_name}-caller-worker"

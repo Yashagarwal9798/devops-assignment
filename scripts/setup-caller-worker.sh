@@ -12,14 +12,14 @@ set -euo pipefail
 
 echo "Installing caller worker dependencies..."
 
-sudo apt-get update -y
+sudo apt-get -o Acquire::ForceIPv4=true update -y
 sudo apt-get install -y git curl jq
 
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
 curl -fsSL https://install.iii.dev/iii/main/install.sh | bash
-sudo ln -sf ~/.iii/bin/iii /usr/local/bin/iii || true
+sudo ln -sf /root/.local/bin/iii /usr/local/bin/iii || true
 
 if [ ! -d /opt/app ]; then
     cd /opt
@@ -89,7 +89,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/app/quickstart
 Environment=III_HOST=0.0.0.0
-ExecStart=/usr/local/bin/iii engine start --config /opt/app/config-caller.yaml
+ExecStart=/usr/local/bin/iii --config /opt/app/config-caller.yaml
 Restart=always
 RestartSec=10
 StandardOutput=journal

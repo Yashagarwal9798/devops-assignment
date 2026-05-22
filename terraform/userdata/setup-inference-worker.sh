@@ -18,7 +18,7 @@ echo "========================================="
 # 1. System updates
 # ---------------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
+apt-get -o Acquire::ForceIPv4=true update -y
 apt-get upgrade -y
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ apt-get install -y python3 python3-pip python3-venv git curl jq
 # ---------------------------------------------------------------------------
 curl -fsSL https://install.iii.dev/iii/main/install.sh | sh
 # Add iii to PATH for all users
-ln -sf /root/.iii/bin/iii /usr/local/bin/iii || true
+ln -sf /root/.local/bin/iii /usr/local/bin/iii || true
 
 # ---------------------------------------------------------------------------
 # 4. Clone the project repository

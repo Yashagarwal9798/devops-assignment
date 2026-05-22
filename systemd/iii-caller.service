@@ -9,7 +9,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/app/quickstart
 Environment=III_HOST=0.0.0.0
-ExecStart=/usr/local/bin/iii engine start --config /opt/app/config-caller.yaml
+ExecStart=/usr/local/bin/iii --config /opt/app/config-caller.yaml
 Restart=always
 RestartSec=10
 StandardOutput=journal
