@@ -1,125 +1,107 @@
-## Verification
+# Distributed Inference Mesh - DevOps Assignment
 
-Public health check:
-
-<img width="1047" height="96" alt="heathcheck" src="https://github.com/user-attachments/assets/8e0675a8-8cbd-4bd9-a099-60491b4ff020" />
-
-<img width="1600" height="756" alt="awscheck" src="https://github.com/user-attachments/assets/f57cf500-1b33-45e4-9a27-39454bf675a9" />
-
-
-# Distributed Inference Mesh — DevOps Assignment
-
-Deploy the [iii quickstart](https://iii.dev/docs/quickstart) distributed inference system across multiple VMs on AWS, with network isolation, reproducible infrastructure, and a public JSON API endpoint.
+This repository deploys the `quickstart` iii worker project on AWS as a small
+distributed inference system. The worker VMs live in a private subnet, communicate
+over private IPs, and expose inference through a single public JSON HTTP endpoint.
 
 ## Architecture
 
+```text
+                         Internet
+                            |
+                            v
+                 +----------------------+
+                 | API Gateway VM       |
+                 | Public subnet        |
+                 | Nginx :80            |
+                 | Public IP            |
+                 +----------+-----------+
+                            |
+                            | reverse proxy to 10.0.2.x:3111
+                            v
++------------------------------------------------------------------+
+| VPC 10.0.0.0/16                                                   |
+|                                                                  |
+| Public subnet 10.0.1.0/24                                        |
+| - API Gateway VM                                                  |
+| - NAT Gateway                                                     |
+| - Internet Gateway route                                          |
+|                                                                  |
+| Private subnet 10.0.2.0/24                                       |
+|                                                                  |
+|   +-------------------------+      iii RPC / worker connection    |
+|   | Caller Worker VM        | <----------------------------------+ |
+|   | TypeScript worker       |                                    | |
+|   | iii engine :49134       |                                    | |
+|   | iii-http :3111          |                                    | |
+|   +------------+------------+                                    | |
+|                |                                                 | |
+|                | triggers inference::run_inference               | |
+|                v                                                 | |
+|   +-------------------------+                                    | |
+|   | Inference Worker VM     | -----------------------------------+ |
+|   | Python worker           |                                      |
+|   | gemma-3-270m GGUF       |                                      |
+|   | no public IP            |                                      |
+|   +-------------------------+                                      |
+|                                                                  |
++------------------------------------------------------------------+
 ```
-                          Internet
-                             │
-                             ▼
-┌────────────────────────────────────────────────────────────┐
-│                    VPC (10.0.0.0/16)                       │
-│                                                            │
-│  ┌──────────────────────┐    ┌───────────────────────────┐ │
-│  │  Public Subnet        │    │  Private Subnet            │ │
-│  │  10.0.1.0/24          │    │  10.0.2.0/24               │ │
-│  │                       │    │                             │ │
-│  │  ┌─────────────────┐  │    │  ┌───────────────────────┐ │ │
-│  │  │ VM 3: API GW    │  │    │  │ VM 2: Caller Worker   │ │ │
-│  │  │ (t3.micro)      │──│────│──│ (TypeScript)          │ │ │
-│  │  │ Nginx :80       │  │    │  │ iii-http :3111        │ │ │
-│  │  │ Public IP ✓     │  │    │  │ No public IP          │ │ │
-│  │  └─────────────────┘  │    │  └───────────┬───────────┘ │ │
-│  │                       │    │              │ RPC :49134   │ │
-│  │  ┌─────────────────┐  │    │  ┌───────────▼───────────┐ │ │
-│  │  │ NAT Gateway     │  │    │  │ VM 1: Inference       │ │ │
-│  │  │ (outbound only) │──│────│──│ Worker (Python)       │ │ │
-│  │  │                 │  │    │  │ gemma-3-270m (GGUF)   │ │ │
-│  │  └─────────────────┘  │    │  │ t3.large (8GB RAM)    │ │ │
-│  │                       │    │  │ No public IP          │ │ │
-│  └──────────────────────┘    │  └───────────────────────┘ │ │
-│                               └───────────────────────────┘ │
-│  Internet Gateway ←→ Public Subnet only                     │
-└────────────────────────────────────────────────────────────┘
-```
 
-### Request Flow
+## AWS Resources
 
-1. User sends `POST /v1/chat/completions` to the API Gateway (public IP, port 80)
-2. Nginx reverse proxy forwards the request to the **caller worker** (private IP, port 3111)
-3. The caller worker's `http::run_inference_over_http` function receives the request
-4. It calls `inference::get_response`, which triggers `inference::run_inference` on the Python worker registered to the same iii engine over the private subnet
-5. The **inference worker** (on a separate VM) loads the `gemma-3-270m` model and generates text
-6. The result flows back: inference worker → caller worker → Nginx → user
+Terraform provisions:
 
-### Network Security
+| Resource | Purpose |
+| --- | --- |
+| VPC `10.0.0.0/16` | Isolated network for the deployment |
+| Public subnet `10.0.1.0/24` | Hosts the API gateway and NAT gateway |
+| Private subnet `10.0.2.0/24` | Hosts the caller and inference worker VMs |
+| Internet Gateway | Gives the public subnet internet access |
+| NAT Gateway | Gives private VMs outbound-only internet access for packages/model downloads |
+| Security groups | Expose only the API gateway publicly; keep workers private |
+| EC2 API gateway | Nginx reverse proxy, public entry point |
+| EC2 caller worker | iii engine, iii-http, TypeScript worker |
+| EC2 inference worker | Python model worker |
 
-- **Workers (VM 1, VM 2):** Private subnet — no public IP, no direct internet access
-- **API Gateway (VM 3):** Public subnet — only port 80 (HTTP) and port 22 (SSH) exposed
-- **NAT Gateway:** Allows private VMs to download packages/models (outbound only)
-- **Security Groups:** Workers accept traffic only from within the VPC (`10.0.0.0/16`)
+## VM Layout
 
----
+| VM | Subnet | Instance type | Public IP | Main process |
+| --- | --- | --- | --- | --- |
+| API Gateway | Public | `t3.micro` | Yes | Nginx on port `80` |
+| Caller Worker | Private | `t3.micro` | No | iii engine on `49134`, iii-http on `3111` |
+| Inference Worker | Private | `t3.large` | No | Python worker connected to caller engine |
 
-## API Documentation
+The inference worker uses `III_URL=ws://<caller_private_ip>:49134`, so it
+registers with the caller VM's iii engine over the private subnet. The public
+internet never talks directly to either worker VM.
 
-### Endpoint
+## Request Flow
 
-```
+1. A client sends `POST /v1/chat/completions` to the API gateway public IP.
+2. Nginx forwards the request to the caller worker VM on private port `3111`.
+3. The TypeScript caller worker handles the HTTP trigger.
+4. The caller worker invokes `inference::run_inference`.
+5. The Python inference worker runs `gemma-3-270m` and returns the response.
+6. The response flows back through caller worker, Nginx, and then to the client.
+
+## API
+
+Endpoint:
+
+```text
 POST http://<API_GATEWAY_PUBLIC_IP>/v1/chat/completions
 ```
 
-### Request
+Request:
 
 ```bash
-curl -X POST http://<API_GATEWAY_PUBLIC_IP>/v1/chat/completions \
+curl -X POST "http://<API_GATEWAY_PUBLIC_IP>/v1/chat/completions" \
   -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {"role": "user", "content": "What is 2+2?"}
-    ]
-  }'
+  -d '{"messages":[{"role":"user","content":"What is 2+2? Answer briefly."}]}'
 ```
 
-### Request Schema
-
-```json
-{
-  "messages": [
-    {
-      "role": "user | system | assistant",
-      "content": "Your message text"
-    }
-  ]
-}
-```
-
-### Response Schema
-
-```json
-{
-  "id": "chatcmpl-gemma-3-270m",
-  "object": "chat.completion",
-  "model": "ggml-org/gemma-3-270m-GGUF",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "The model's generated text response"
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 12,
-    "completion_tokens": 8,
-    "total_tokens": 20
-  }
-}
-```
-
-### Sample Response
+Expected response shape:
 
 ```json
 {
@@ -144,172 +126,143 @@ curl -X POST http://<API_GATEWAY_PUBLIC_IP>/v1/chat/completions \
 }
 ```
 
-### Health Check
+Health check for the public Nginx gateway:
 
 ```bash
-curl http://<API_GATEWAY_PUBLIC_IP>/health
-# Returns: {"status": "ok"}
+curl "http://<API_GATEWAY_PUBLIC_IP>/health"
 ```
 
----
+Expected:
 
-## Prerequisites
-
-- **AWS Account** with programmatic access (Access Key + Secret Key)
-- **Terraform** >= 1.0 ([install](https://developer.hashicorp.com/terraform/downloads))
-- **AWS CLI** v2 ([install](https://aws.amazon.com/cli/))
-
----
-
-## Deployment Instructions (From Scratch)
-
-### 1. Configure AWS CLI
-
-```bash
-aws configure
-# AWS Access Key ID: <your-key>
-# AWS Secret Access Key: <your-secret>
-# Default region name: ap-south-1
-# Default output format: json
+```json
+{"status":"ok"}
 ```
 
-### 2. Clone the Repository
+## Deployment
+
+Prerequisites:
+
+- AWS account and AWS CLI credentials
+- Terraform `>= 1.0`
+- Git
+
+Deploy:
 
 ```bash
 git clone https://github.com/Yashagarwal9798/devops-assignment.git
-cd devops-assignment
-```
-
-### 3. Deploy with Terraform
-
-```bash
-cd terraform
-
-# Initialize Terraform (downloads AWS provider)
+cd devops-assignment/terraform
 terraform init
-
-# Preview the resources that will be created
 terraform plan
-
-# Create everything (type "yes" when prompted)
 terraform apply
 ```
 
-Terraform will output:
-- `api_gateway_public_ip` — the public IP for API requests
-- `inference_worker_private_ip` — internal IP of inference worker
-- `caller_worker_private_ip` — internal IP of caller worker
-- `test_curl_command` — ready-to-use curl command
+Terraform outputs:
 
-### 4. Wait for Bootstrap (~5-10 minutes)
+- `api_gateway_public_ip`
+- `api_endpoint`
+- `caller_worker_private_ip`
+- `inference_worker_private_ip`
+- SSH commands for all VMs
+- Ready-to-run curl command
 
-The VMs run setup scripts automatically on boot (user_data). They:
-- Install dependencies (Python/Node.js)
-- Install the iii engine
-- Clone the repo and install worker dependencies
-- Start the workers as systemd services
+Wait several minutes after `terraform apply`. The EC2 `user_data` scripts install
+packages, install iii, clone this repo, install worker dependencies, and create
+systemd services.
 
-The caller VM owns the iii engine, `iii-http` on port `3111`, and the TypeScript caller worker. The inference VM runs only the Python worker process and connects to the caller VM's engine at `ws://<CALLER_PRIVATE_IP>:49134`.
+## Operations
 
-### 5. Verify the Deployment
-
-```bash
-# Check if API gateway is responding
-curl http://<API_GATEWAY_PUBLIC_IP>/health
-
-# Test inference (may take a moment on first run — model download)
-curl -X POST http://<API_GATEWAY_PUBLIC_IP>/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "What is 2+2?"}]}'
-```
-
-### 6. SSH Access (for debugging)
+SSH from the `terraform/` directory after apply:
 
 ```bash
-# Run these from the terraform directory, where devops-key.pem is generated.
-cd terraform
-
-# SSH into API gateway (bastion host)
 ssh -i devops-key.pem ubuntu@<API_GATEWAY_PUBLIC_IP>
 
-# SSH into private VMs from your local machine via the API gateway
-ssh -i devops-key.pem -o IdentitiesOnly=yes -o ProxyJump=ubuntu@<API_GATEWAY_PUBLIC_IP> ubuntu@<INFERENCE_WORKER_PRIVATE_IP>
-ssh -i devops-key.pem -o IdentitiesOnly=yes -o ProxyJump=ubuntu@<API_GATEWAY_PUBLIC_IP> ubuntu@<CALLER_WORKER_PRIVATE_IP>
+ssh -i devops-key.pem -o IdentitiesOnly=yes \
+  -o ProxyJump=ubuntu@<API_GATEWAY_PUBLIC_IP> \
+  ubuntu@<CALLER_WORKER_PRIVATE_IP>
 
-# Check worker logs
-sudo journalctl -u iii-inference -f   # On inference worker VM
-sudo journalctl -u iii-caller -f      # On caller worker VM
+ssh -i devops-key.pem -o IdentitiesOnly=yes \
+  -o ProxyJump=ubuntu@<API_GATEWAY_PUBLIC_IP> \
+  ubuntu@<INFERENCE_WORKER_PRIVATE_IP>
 ```
 
-### 7. Tear Down (IMPORTANT — avoid charges)
+Check services:
+
+```bash
+# API gateway VM
+sudo systemctl status nginx --no-pager -l
+
+# Caller worker VM
+sudo systemctl status iii-caller --no-pager -l
+sudo journalctl -u iii-caller -n 100 --no-pager
+sudo ss -lntp | grep -E '3111|49134'
+
+# Inference worker VM
+sudo systemctl status iii-inference --no-pager -l
+sudo journalctl -u iii-inference -n 100 --no-pager
+```
+
+## Repository Structure
+
+```text
+devops-assignment/
+|-- README.md
+|-- WRITEUP.md
+|-- quickstart/
+|   |-- config.yaml
+|   `-- workers/
+|       |-- caller-worker/
+|       |   |-- src/worker.ts
+|       |   |-- package.json
+|       |   `-- iii.worker.yaml
+|       `-- inference-worker/
+|           |-- inference_worker.py
+|           |-- requirements.txt
+|           `-- iii.worker.yaml
+|-- terraform/
+|   |-- main.tf
+|   |-- variables.tf
+|   |-- vpc.tf
+|   |-- security_groups.tf
+|   |-- ec2.tf
+|   |-- key.tf
+|   |-- outputs.tf
+|   `-- userdata/
+|       |-- setup-api-gateway.sh
+|       |-- setup-caller-worker.sh
+|       `-- setup-inference-worker.sh
+|-- scripts/
+|   |-- setup-api-gateway.sh
+|   |-- setup-caller-worker.sh
+|   `-- setup-inference-worker.sh
+`-- systemd/
+    |-- iii-caller.service
+    `-- iii-inference.service
+```
+
+## Security Notes
+
+- Worker instances have no public IPs.
+- Only the API gateway is publicly reachable.
+- Worker security group allows internal VPC traffic and SSH only from the API gateway security group.
+- Private workers use a NAT Gateway for outbound package/model downloads.
+- Terraform state, SSH keys, `.tfvars`, and local credentials are ignored by `.gitignore`.
+
+## Tear Down
+
+Destroy the stack when not testing to avoid EC2 and NAT Gateway charges:
 
 ```bash
 cd terraform
 terraform destroy
-# Type "yes" to confirm
 ```
 
-> ⚠️ **Always destroy resources when not testing.** The NAT Gateway alone costs ~$0.045/hour.
+## Verification Evidence
 
----
+The public health check was validated with:
 
-## Repository Structure
-
-```
-devops-assignment/
-├── README.md                           ← This file
-├── WRITEUP.md                          ← Production hardening & scaling discussion
-├── quickstart/                         ← Application code (from Alchemyst AI)
-│   ├── config.yaml                     ← iii engine configuration
-│   └── workers/
-│       ├── inference-worker/           ← Python — loads gemma-3-270m model
-│       │   ├── inference_worker.py
-│       │   ├── requirements.txt
-│       │   └── iii.worker.yaml
-│       └── caller-worker/              ← TypeScript — API router / RPC caller
-│           ├── src/worker.ts
-│           ├── package.json
-│           └── iii.worker.yaml
-├── terraform/                          ← Infrastructure as Code
-│   ├── main.tf                         ← AWS provider configuration
-│   ├── variables.tf                    ← Configurable parameters
-│   ├── vpc.tf                          ← VPC, subnets, IGW, NAT GW, route tables
-│   ├── security_groups.tf              ← Firewall rules (API vs workers)
-│   ├── ec2.tf                          ← EC2 instances (3 VMs)
-│   ├── key.tf                          ← SSH key pair generation
-│   ├── outputs.tf                      ← Deployment outputs (IPs, curl command)
-│   └── userdata/                       ← VM bootstrap scripts (run on boot)
-│       ├── setup-inference-worker.sh
-│       ├── setup-caller-worker.sh
-│       └── setup-api-gateway.sh
-├── scripts/                            ← Manual setup scripts (fallback)
-│   ├── setup-inference-worker.sh
-│   ├── setup-caller-worker.sh
-│   └── setup-api-gateway.sh
-├── systemd/                            ← Systemd unit files
-│   ├── iii-inference.service
-│   └── iii-caller.service
-└── .gitignore                          ← Excludes secrets, keys, tfstate
+```bash
+curl "http://<API_GATEWAY_PUBLIC_IP>/health"
 ```
 
----
-
-## Technology Stack
-
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| Cloud Provider | AWS (ap-south-1) | Infrastructure hosting |
-| IaC | Terraform | Reproducible infrastructure |
-| Networking | VPC, Subnets, NAT GW | Network isolation |
-| Compute | EC2 (t3.large + t3.micro) | Virtual machines |
-| Reverse Proxy | Nginx | HTTP routing / load balancing |
-| RPC Framework | [iii](https://iii.dev) | Cross-language worker mesh |
-| ML Model | gemma-3-270m (GGUF Q8) | Small language model |
-| Process Manager | systemd | Service lifecycle management |
-
----
-
-## Author
-
-**Yash Agarwal**  
-DevOps Internship Assignment — Alchemyst AI
+Screenshots can be added after redacting AWS account ID, usernames, public IPs,
+private IPs, and EC2 instance IDs.
