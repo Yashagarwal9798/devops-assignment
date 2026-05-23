@@ -1,3 +1,12 @@
+## Verification
+
+Public health check:
+
+<img width="1047" height="96" alt="heathcheck" src="https://github.com/user-attachments/assets/8e0675a8-8cbd-4bd9-a099-60491b4ff020" />
+
+<img width="1600" height="756" alt="awscheck" src="https://github.com/user-attachments/assets/f57cf500-1b33-45e4-9a27-39454bf675a9" />
+
+
 # Distributed Inference Mesh — DevOps Assignment
 
 Deploy the [iii quickstart](https://iii.dev/docs/quickstart) distributed inference system across multiple VMs on AWS, with network isolation, reproducible infrastructure, and a public JSON API endpoint.
