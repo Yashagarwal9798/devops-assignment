@@ -1,3 +1,12 @@
+## Verification
+
+Public health check:
+
+<img width="1047" height="96" alt="heathcheck" src="https://github.com/user-attachments/assets/8e0675a8-8cbd-4bd9-a099-60491b4ff020" />
+
+<img width="1600" height="756" alt="awscheck" src="https://github.com/user-attachments/assets/372bb2f1-48f9-4fc5-904f-ee6cdb7dc1d7" />
+
+
 # Distributed Inference Mesh - DevOps Assignment
 
 This repository deploys the `quickstart` iii worker project on AWS as a small
